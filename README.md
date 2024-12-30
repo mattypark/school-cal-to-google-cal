@@ -3,6 +3,7 @@ git add .
 git commit -m "whateveryouchanged"
 git push origin main
 
+git reset --hard 
 
 
 
