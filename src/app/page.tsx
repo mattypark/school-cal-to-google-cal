@@ -12,7 +12,7 @@ export default function Home() {
         <Button 
           variant="secondary" 
           size="lg"
-          className="w-64"
+          className="w-72"
         >
           Sign in with Google
         </Button>
