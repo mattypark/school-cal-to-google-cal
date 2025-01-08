@@ -19,11 +19,14 @@ export class CalendarService {
       const auth = await this.getOAuthClient(accessToken)
       const calendar = google.calendar({ version: 'v3', auth })
       
+      console.log('Adding event:', event)
+      
       const response = await calendar.events.insert({
         calendarId: 'primary',
         requestBody: event,
       })
       
+      console.log('Event added:', response.data)
       return response.data
     } catch (error) {
       console.error('Error adding event:', error)
