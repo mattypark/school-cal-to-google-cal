@@ -1,9 +1,27 @@
 
 git add .
 git commit -m "whateveryouchanged"
-git push origin main
+git push -u origin main
 
 git reset --hard 
+
+
+use in terminal
+npm install next-auth @auth/core
+npm install --save-dev @types/ical
+npm install cheerio axios ical
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
