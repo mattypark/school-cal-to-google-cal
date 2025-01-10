@@ -5,6 +5,7 @@ git push -u origin main
 
 git reset --hard 
 
+command + l (access' to ai)
 
 use in terminal
 npm install next-auth @auth/core
