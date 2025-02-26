@@ -11,7 +11,7 @@ use in terminal
 npm install next-auth @auth/core
 npm install --save-dev @types/ical
 npm install cheerio axios ical
-
+npm install axios cheerio
 
 
 
