@@ -14,6 +14,7 @@ interface CalendarEvent {
     dateTime: string;
     timeZone: string;
   };
+  recurrence?: string[];
 }
 
 export async function parseSchoolCalendar(url: string): Promise<CalendarEvent[]> {
@@ -53,6 +54,7 @@ export async function parseSchoolCalendar(url: string): Promise<CalendarEvent[]>
                 dateTime: `${dateStr}T${endTimeStr}:00`,
                 timeZone: 'America/New_York',
               },
+              recurrence: event.recurrence,
             }
           })
         )
@@ -73,38 +75,60 @@ export async function parseSchoolCalendar(url: string): Promise<CalendarEvent[]>
       '.event', '.calendar-event', '.event-item',
       '[class*="event"]', '[class*="calendar"]',
       'tr[data-date]', 'div[data-date]',
-      '.fc-event', '.vevent'
+      '.fc-event', '.vevent',
+      // Add more common calendar selectors
+      'table tr', // For table-based schedules
+      '[class*="schedule"]', // For schedule-based layouts
+      '[class*="course"]', // For course schedules
+      '[class*="class"]', // For class schedules
     ].join(', ')
 
     $(eventSelectors).each((_, element) => {
       const $element = $(element)
       
+      // Try multiple approaches to find the title
       const title = $element.find('[class*="title"], [class*="summary"], h3, h4').first().text().trim() ||
-                   $element.find('*').filter((_, el) => /title|summary|subject/i.test($(el).attr('class') || '')).first().text().trim()
+                   $element.find('*').filter((_, el) => /title|summary|subject|course/i.test($(el).attr('class') || '')).first().text().trim() ||
+                   $element.find('td').first().text().trim() // For table-based layouts
 
+      // Try to find date and time information
       const dateElement = $element.find('[class*="date"], [class*="time"], time').first()
       const dateText = dateElement.text().trim() ||
                       dateElement.attr('datetime') ||
                       $element.attr('data-date') ||
+                      $element.find('td').eq(1).text().trim() || // For table-based layouts
                       ''
 
+      // Try to find description and location
       const description = $element.find('[class*="desc"], [class*="details"]').first().text().trim()
-      const location = $element.find('[class*="location"], [class*="venue"]').first().text().trim()
+      const location = $element.find('[class*="location"], [class*="venue"], [class*="room"]').first().text().trim()
 
       if (title && dateText) {
         const eventDate = parseEventDate(dateText)
         if (eventDate) {
-          const endDate = new Date(eventDate.getTime() + 60 * 60 * 1000)
+          // Try to extract time information
+          const timeMatch = dateText.match(/(\d{1,2}:\d{2})\s*(?:-|to)\s*(\d{1,2}:\d{2})/i)
+          const startTime = timeMatch ? timeMatch[1] : '00:00'
+          const endTime = timeMatch ? timeMatch[2] : addHours(startTime, 1)
+
+          const startDateTime = new Date(eventDate)
+          const [startHours, startMinutes] = startTime.split(':').map(Number)
+          startDateTime.setHours(startHours, startMinutes)
+
+          const endDateTime = new Date(eventDate)
+          const [endHours, endMinutes] = endTime.split(':').map(Number)
+          endDateTime.setHours(endHours, endMinutes)
+
           events.push({
             summary: title,
             description,
             location,
             start: {
-              dateTime: eventDate.toISOString(),
+              dateTime: startDateTime.toISOString(),
               timeZone: 'America/New_York',
             },
             end: {
-              dateTime: endDate.toISOString(),
+              dateTime: endDateTime.toISOString(),
               timeZone: 'America/New_York',
             },
           })
@@ -122,29 +146,54 @@ export async function parseSchoolCalendar(url: string): Promise<CalendarEvent[]>
 
 function parseEventDate(dateText: string): Date | null {
   try {
-    dateText = dateText.replace(/(\d+)(st|nd|rd|th)/g, '$1').trim()
+    // Remove ordinal indicators and clean up the text
+    dateText = dateText.replace(/(\d+)(st|nd|rd|th)/g, '$1')
+                      .replace(/\s+/g, ' ')
+                      .trim()
 
+    // Try parsing as is first
     let date = new Date(dateText)
     if (!isNaN(date.getTime())) {
       return date
     }
 
+    // Common date formats to try
     const formats = [
-      /(\d{1,2})\/(\d{1,2})\/(\d{4})/,
-      /(\d{4})-(\d{2})-(\d{2})/,
-      /(\w+)\s+(\d{1,2}),?\s*(\d{4})?/i
+      // MM/DD/YYYY
+      {
+        regex: /(\d{1,2})\/(\d{1,2})\/(\d{4})/,
+        parse: (m: RegExpMatchArray) => new Date(`${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`)
+      },
+      // YYYY-MM-DD
+      {
+        regex: /(\d{4})-(\d{2})-(\d{2})/,
+        parse: (m: RegExpMatchArray) => new Date(m[0])
+      },
+      // Month DD, YYYY
+      {
+        regex: /(\w+)\s+(\d{1,2}),?\s*(\d{4})?/i,
+        parse: (m: RegExpMatchArray) => {
+          const year = m[3] || new Date().getFullYear().toString()
+          return new Date(`${m[1]} ${m[2]}, ${year}`)
+        }
+      },
+      // DD Month YYYY
+      {
+        regex: /(\d{1,2})\s+(\w+)\s+(\d{4})/i,
+        parse: (m: RegExpMatchArray) => new Date(`${m[2]} ${m[1]}, ${m[3]}`)
+      }
     ]
 
     for (const format of formats) {
-      const match = dateText.match(format)
+      const match = dateText.match(format.regex)
       if (match) {
-        if (format.source.includes('YYYY-MM-DD')) {
-          return new Date(match[0])
-        } else if (format.source.includes('MM/DD/YYYY')) {
-          return new Date(match[0])
-        } else {
-          const year = match[3] || new Date().getFullYear().toString()
-          return new Date(`${match[1]} ${match[2]}, ${year}`)
+        try {
+          const parsedDate = format.parse(match)
+          if (!isNaN(parsedDate.getTime())) {
+            return parsedDate
+          }
+        } catch (e) {
+          console.error('Error parsing date format:', e)
         }
       }
     }

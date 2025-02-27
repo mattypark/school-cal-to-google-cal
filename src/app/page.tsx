@@ -13,7 +13,15 @@ export default function Home() {
   const [status, setStatus] = useState<string | null>(null)
 
   const handleSubmit = async () => {
-    if (!url || !session?.accessToken) return
+    if (!url) {
+      setError("Please enter a URL")
+      return
+    }
+    
+    if (!session?.accessToken) {
+      setError("Please sign in first")
+      return
+    }
 
     setIsLoading(true)
     setError(null)
@@ -41,6 +49,12 @@ export default function Home() {
         setStatus(`Successfully added ${data.addedEvents} events to your calendar!`)
         setUrl("")
       }
+
+      // If there were any errors during the process, show them
+      if (data.errors?.length > 0) {
+        console.error('Some events failed to add:', data.errors)
+        setError(`Successfully added ${data.addedEvents} events, but ${data.errors.length} failed. Check console for details.`)
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to process calendar"
       setError(message)
@@ -51,12 +65,24 @@ export default function Home() {
     }
   }
 
+  const handleSignIn = async () => {
+    try {
+      await signIn("google", {
+        callbackUrl: window.location.href,
+        prompt: "consent",
+      })
+    } catch (error) {
+      console.error('Sign in error:', error)
+      setError('Failed to sign in. Please try again.')
+    }
+  }
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-8 p-4">
       <h1 className="text-3xl font-bold">School Calendar Sync</h1>
 
       {!session ? (
-        <Button onClick={() => signIn("google")}>
+        <Button onClick={handleSignIn}>
           Sign in with Google
         </Button>
       ) : (
@@ -74,6 +100,7 @@ export default function Home() {
               placeholder="Paste your school calendar URL"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
             />
             {error && (
               <p className="text-red-500 text-sm">{error}</p>

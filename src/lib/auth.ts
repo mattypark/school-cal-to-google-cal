@@ -18,6 +18,11 @@ interface ExtendedToken extends JWT {
 interface ExtendedSession extends Session {
   accessToken?: string
   error?: string
+  user?: {
+    name?: string | null
+    email?: string | null
+    image?: string | null
+  }
 }
 
 export const authOptions: NextAuthOptions = {
@@ -35,6 +40,8 @@ export const authOptions: NextAuthOptions = {
           scope: [
             "https://www.googleapis.com/auth/calendar",
             "https://www.googleapis.com/auth/calendar.events",
+            "https://www.googleapis.com/auth/calendar.events.readonly",
+            "https://www.googleapis.com/auth/calendar.readonly",
             "openid",
             "email",
             "profile",
@@ -51,12 +58,19 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, account, user }): Promise<ExtendedToken> {
       // Initial sign in
       if (account && user) {
-        console.log('Initial sign in, setting token:', { account, user })
+        console.log('Initial sign in, setting token:', { 
+          account: { ...account, access_token: account.access_token?.substring(0, 10) + '...' },
+          user 
+        })
         return {
           accessToken: account.access_token,
           accessTokenExpires: Date.now() + (account.expires_in as number) * 1000,
           refreshToken: account.refresh_token,
-          user,
+          user: {
+            name: user.name,
+            email: user.email,
+            image: user.image
+          },
         }
       }
 
@@ -73,6 +87,13 @@ export const authOptions: NextAuthOptions = {
       }
     },
     async session({ session, token }): Promise<ExtendedSession> {
+      console.log('Creating session from token:', { 
+        token: { 
+          ...token,
+          accessToken: token.accessToken ? token.accessToken.substring(0, 10) + '...' : undefined
+        } 
+      })
+
       if (token?.error) {
         session.error = token.error
       }
@@ -94,7 +115,14 @@ export const authOptions: NextAuthOptions = {
   },
   events: {
     async signIn({ user, account, profile }) {
-      console.log('Sign in event:', { user, account, profile })
+      console.log('Sign in event:', { 
+        user,
+        account: account ? {
+          ...account,
+          access_token: account.access_token?.substring(0, 10) + '...'
+        } : undefined,
+        profile 
+      })
     },
     async signOut({ session, token }) {
       console.log('Sign out event:', { session, token })

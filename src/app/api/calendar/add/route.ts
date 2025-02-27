@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     
     // Parse the school calendar
     const events = await parseSchoolCalendar(url)
-    console.log(`Found ${events.length} events to add`)
+    console.log(`Found ${events.length} events to add:`, JSON.stringify(events, null, 2))
     
     if (events.length === 0) {
       return NextResponse.json({
@@ -40,9 +40,14 @@ export async function POST(req: Request) {
     const addedEvents = []
     const errors = []
 
+    console.log('Starting to add events to Google Calendar...')
+    console.log('Using access token:', session.accessToken?.substring(0, 10) + '...')
+
     for (const event of events) {
       try {
+        console.log('Adding event:', JSON.stringify(event, null, 2))
         const result = await CalendarService.addEvent(session.accessToken, event)
+        console.log('Successfully added event:', result)
         addedEvents.push(result)
       } catch (error) {
         console.error('Error adding event:', error)
@@ -54,12 +59,14 @@ export async function POST(req: Request) {
     }
 
     if (addedEvents.length === 0 && errors.length > 0) {
+      console.error('Failed to add any events. Errors:', errors)
       return NextResponse.json({
         error: "Failed to add any events to calendar",
         details: errors
       }, { status: 500 })
     }
 
+    console.log(`Successfully added ${addedEvents.length} events to calendar`)
     return NextResponse.json({ 
       success: true, 
       addedEvents: addedEvents.length,
