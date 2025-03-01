@@ -3,7 +3,7 @@ import GoogleProvider from "next-auth/providers/google"
 import { JWT } from "next-auth/jwt"
 import { Session } from "next-auth"
 
-interface ExtendedToken extends JWT {
+export interface ExtendedToken extends JWT {
   accessToken?: string
   refreshToken?: string
   accessTokenExpires?: number
@@ -15,7 +15,7 @@ interface ExtendedToken extends JWT {
   error?: string
 }
 
-interface ExtendedSession extends Session {
+export interface ExtendedSession extends Session {
   accessToken?: string
   error?: string
   user?: {

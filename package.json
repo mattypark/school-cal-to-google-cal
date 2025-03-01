@@ -37,5 +37,18 @@
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5"
-  }
+  },
+  "description": "git add . git commit -m \"whateveryouchanged\" git push -u origin main",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mattypark/school-cal-to-google-cal.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/mattypark/school-cal-to-google-cal/issues"
+  },
+  "homepage": "https://github.com/mattypark/school-cal-to-google-cal#readme"
 }

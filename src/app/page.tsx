@@ -11,6 +11,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
+  const [scrapedData, setScrapedData] = useState<any>(null)
 
   const handleSubmit = async () => {
     if (!url) {
@@ -26,9 +27,17 @@ export default function Home() {
     setIsLoading(true)
     setError(null)
     setStatus("Starting...")
+    setScrapedData(null)
 
     try {
-      setStatus("Fetching calendar data...")
+      // First, try to validate the URL
+      try {
+        new URL(url);
+      } catch {
+        throw new Error("Please enter a valid URL (e.g., https://example.com)");
+      }
+
+      setStatus("Analyzing webpage content...")
       const response = await fetch("/api/calendar/add", {
         method: "POST",
         headers: {
@@ -41,6 +50,11 @@ export default function Home() {
       
       if (!response.ok) {
         throw new Error(data.error || "Failed to add events")
+      }
+
+      // Show the scraped data in the UI
+      if (data.events) {
+        setScrapedData(data.events)
       }
 
       if (data.addedEvents === 0) {
@@ -79,7 +93,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-8 p-4">
-      <h1 className="text-3xl font-bold">School Calendar Sync</h1>
+      <h1 className="text-3xl font-bold">Calendar Event Extractor</h1>
 
       {!session ? (
         <Button onClick={handleSignIn}>
@@ -97,7 +111,7 @@ export default function Home() {
           <div className="space-y-2">
             <Input
               type="url"
-              placeholder="Paste your school calendar URL"
+              placeholder="Paste any webpage URL containing events"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
@@ -113,16 +127,39 @@ export default function Home() {
               onClick={handleSubmit}
               disabled={isLoading || !url}
             >
-              {isLoading ? "Processing..." : "Add to Calendar"}
+              {isLoading ? "Processing..." : "Extract & Add Events"}
             </Button>
           </div>
 
+          {scrapedData && (
+            <div className="mt-4 p-4 bg-gray-100 rounded-md">
+              <h2 className="font-semibold mb-2">Found Events:</h2>
+              <div className="space-y-2">
+                {scrapedData.map((event: any, index: number) => (
+                  <div key={index} className="p-2 bg-white rounded border">
+                    <p className="font-medium">{event.title}</p>
+                    <p className="text-sm text-gray-600">
+                      {event.date} {event.startTime && `at ${event.startTime}`}
+                      {event.endTime && ` - ${event.endTime}`}
+                    </p>
+                    {event.location && (
+                      <p className="text-sm text-gray-500">{event.location}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="mt-4 p-4 bg-gray-100 rounded-md text-sm">
-            <p>For best results, try these URLs:</p>
+            <p>You can try any webpage that contains events, such as:</p>
             <ul className="list-disc pl-4 mt-2">
-              <li>Your school's calendar page</li>
-              <li>The events or announcements page</li>
-              <li>Any page containing upcoming events</li>
+              <li>School course schedules</li>
+              <li>Event listing pages</li>
+              <li>Conference schedules</li>
+              <li>Sports calendars</li>
+              <li>Class timetables</li>
+              <li>Any page with dates and times</li>
             </ul>
           </div>
         </div>

@@ -13,99 +13,114 @@ interface ScrapedEvent {
 
 export const fetchEvents = async (url: string): Promise<ScrapedEvent[]> => {
   try {
-    console.log('Fetching URL:', url);
+    console.log('Starting web scraping for URL:', url);
     const { data } = await axios.get(url);
     const $ = cheerio.load(data);
     const events: ScrapedEvent[] = [];
 
-    // Common patterns for event containers
-    const eventContainers = [
-      // Calendar specific selectors
-      '.calendar-event',
-      '.event',
-      '.vevent',
-      '[class*="event"]',
-      // Course specific selectors
-      '.course-item',
-      '.class-schedule',
-      '[class*="course"]',
-      // Table based selectors
-      'tr[data-date]',
-      'tr:has(td:nth-child(1):contains("Date"))',
-      // Generic containers that might contain event info
-      '[class*="schedule"] > div',
-      '[class*="calendar"] > div'
-    ].join(', ');
+    // Log the entire HTML structure for debugging
+    console.log('Page structure:', $.html());
 
-    console.log('Scanning for events using Cheerio...');
+    // Try different selectors for events
+    const selectors = [
+      // Tables
+      'table tr',
+      'tbody tr',
+      // List items
+      'li.event',
+      'li.calendar-event',
+      // Div containers
+      'div.event',
+      'div[class*="event"]',
+      'div[class*="calendar"]',
+      // Articles
+      'article',
+      // Generic containers
+      '.item',
+      '.entry',
+      // Course specific
+      '.course',
+      '.class',
+      // Schedule specific
+      '.schedule-item',
+      '[class*="schedule"]'
+    ];
 
-    $(eventContainers).each((_, element) => {
-      try {
-        const $element = $(element);
-        
-        // Try multiple approaches to find the title
-        const title = findText($, $element, [
-          '[class*="title"]',
-          '[class*="summary"]',
-          'h3, h4',
-          'td:first-child',
-          '.course-name',
-          '.event-name'
-        ]);
+    console.log('Trying selectors:', selectors);
 
-        // Try to find date information
-        const dateText = findText($, $element, [
-          '[class*="date"]',
-          'time',
-          '[datetime]',
-          'td:nth-child(2)',
-          '.event-date'
-        ]) || $element.attr('data-date');
+    for (const selector of selectors) {
+      console.log(`Checking selector: ${selector}`);
+      const elements = $(selector);
+      console.log(`Found ${elements.length} elements with selector ${selector}`);
 
-        // Try to find time information
-        const timeText = findText($, $element, [
-          '[class*="time"]',
-          '.hours',
-          'td:nth-child(3)',
-          '.event-time'
-        ]);
+      if (elements.length > 0) {
+        elements.each((_, element) => {
+          try {
+            const $element = $(element);
+            
+            // Try to find title
+            const title = findContent($, $element, [
+              'h1', 'h2', 'h3', 'h4',
+              '.title', '.summary', '.event-title',
+              '[class*="title"]',
+              'td:first-child',
+              '.name', '.event-name',
+              'strong', 'b'
+            ]);
 
-        // Try to find location
-        const location = findText($, $element, [
-          '[class*="location"]',
-          '[class*="venue"]',
-          '[class*="room"]',
-          '.place'
-        ]);
+            // Try to find date
+            const dateText = findContent($, $element, [
+              '.date', '[class*="date"]',
+              'time', '[datetime]',
+              '.schedule-time',
+              'td:nth-child(2)'
+            ]) || $element.attr('data-date');
 
-        // Try to find description
-        const description = findText($, $element, [
-          '[class*="description"]',
-          '[class*="details"]',
-          '.notes',
-          '.info'
-        ]);
+            // Try to find time
+            const timeText = findContent($, $element, [
+              '.time', '[class*="time"]',
+              '.hours', '.schedule',
+              'td:nth-child(3)'
+            ]);
 
-        if (title && dateText) {
-          // Parse time information
-          const { startTime, endTime } = parseTimeInfo(timeText);
+            // Try to find location
+            const location = findContent($, $element, [
+              '.location', '[class*="location"]',
+              '.venue', '.place', '.room',
+              'td:nth-child(4)'
+            ]);
 
-          // Clean up the date text
-          const cleanDate = cleanDateText(dateText);
+            // Try to find description
+            const description = findContent($, $element, [
+              '.description', '[class*="description"]',
+              '.details', '.info', '.notes',
+              'p'
+            ]);
 
-          events.push({
-            title: title.trim(),
-            date: cleanDate,
-            startTime,
-            endTime,
-            location: location?.trim(),
-            description: description?.trim()
-          });
-        }
-      } catch (error) {
-        console.error('Error processing event element:', error);
+            if (title && (dateText || timeText)) {
+              console.log('Found event:', { title, dateText, timeText });
+              
+              const event: ScrapedEvent = {
+                title: title.trim(),
+                date: dateText ? cleanDate(dateText) : new Date().toISOString().split('T')[0],
+                description: description?.trim(),
+                location: location?.trim()
+              };
+
+              if (timeText) {
+                const times = parseTimeRange(timeText);
+                event.startTime = times.startTime;
+                event.endTime = times.endTime;
+              }
+
+              events.push(event);
+            }
+          } catch (error) {
+            console.error('Error processing element:', error);
+          }
+        });
       }
-    });
+    }
 
     console.log(`Found ${events.length} events through web scraping`);
 
@@ -129,56 +144,40 @@ export const fetchEvents = async (url: string): Promise<ScrapedEvent[]> => {
 
     return events;
   } catch (error) {
-    console.error('Error fetching events:', error);
+    console.error('Error in web scraping:', error);
     return [];
   }
 };
 
-// Helper function to find text using multiple selectors
-function findText($: cheerio.CheerioAPI, $element: cheerio.Cheerio<any>, selectors: string[]): string | undefined {
+// Helper function to find content using multiple selectors
+function findContent($: cheerio.CheerioAPI, $element: cheerio.Cheerio<any>, selectors: string[]): string | undefined {
   for (const selector of selectors) {
-    const text = $element.find(selector).first().text().trim();
-    if (text) return text;
+    const found = $element.find(selector).first().text().trim();
+    if (found) {
+      console.log(`Found content with selector ${selector}:`, found);
+      return found;
+    }
   }
+  
+  // Try direct text if no selectors match
+  const directText = $element.text().trim();
+  if (directText) return directText;
+  
   return undefined;
 }
 
-// Helper function to parse time information
-function parseTimeInfo(timeText: string | undefined): { startTime?: string; endTime?: string } {
-  if (!timeText) return {};
-
-  // Common time formats: "HH:MM - HH:MM", "HH:MM to HH:MM", "HH:MM"
-  const timeMatch = timeText.match(/(\d{1,2}:\d{2})\s*(?:-|to)\s*(\d{1,2}:\d{2})/i);
-  if (timeMatch) {
-    return {
-      startTime: timeMatch[1],
-      endTime: timeMatch[2]
-    };
-  }
-
-  // Single time format
-  const singleTimeMatch = timeText.match(/(\d{1,2}:\d{2})/);
-  if (singleTimeMatch) {
-    return {
-      startTime: singleTimeMatch[1]
-    };
-  }
-
-  return {};
-}
-
-// Helper function to clean and standardize date text
-function cleanDateText(dateText: string): string {
-  // Remove ordinal indicators
-  dateText = dateText.replace(/(\d+)(st|nd|rd|th)/g, '$1');
+// Helper function to clean and standardize dates
+function cleanDate(dateText: string): string {
+  // Remove ordinal indicators and extra spaces
+  dateText = dateText.replace(/(\d+)(st|nd|rd|th)/g, '$1').trim();
   
-  // Try parsing as ISO date first
+  // Try parsing as ISO date
   const isoDate = new Date(dateText);
   if (!isNaN(isoDate.getTime())) {
     return isoDate.toISOString().split('T')[0];
   }
 
-  // Handle various date formats
+  // Try common date formats
   const formats = [
     // MM/DD/YYYY
     {
@@ -206,6 +205,60 @@ function cleanDateText(dateText: string): string {
     }
   }
 
-  // If all else fails, return the original date text
-  return dateText;
+  // If all else fails, return today's date
+  return new Date().toISOString().split('T')[0];
+}
+
+// Helper function to parse time ranges
+function parseTimeRange(timeText: string): { startTime?: string; endTime?: string } {
+  // Clean up the time text
+  timeText = timeText.toLowerCase().trim();
+  
+  // Look for time ranges (e.g., "2:30 PM - 3:45 PM" or "14:30-15:45")
+  const timeRangeRegex = /(\d{1,2}(?::\d{2})?(?:\s*[ap]m)?)\s*(?:-|to)\s*(\d{1,2}(?::\d{2})?(?:\s*[ap]m)?)/i;
+  const match = timeText.match(timeRangeRegex);
+
+  if (match) {
+    const start = convertTo24Hour(match[1]);
+    const end = convertTo24Hour(match[2]);
+    return { startTime: start, endTime: end };
+  }
+
+  // Look for single time
+  const singleTimeRegex = /(\d{1,2}(?::\d{2})?(?:\s*[ap]m)?)/i;
+  const singleMatch = timeText.match(singleTimeRegex);
+  if (singleMatch) {
+    const time = convertTo24Hour(singleMatch[1]);
+    return { startTime: time };
+  }
+
+  return {};
+}
+
+// Helper function to convert times to 24-hour format
+function convertTo24Hour(timeStr: string): string {
+  timeStr = timeStr.toLowerCase().trim();
+  
+  // If already in 24-hour format
+  if (timeStr.match(/^\d{2}:\d{2}$/)) {
+    return timeStr;
+  }
+
+  let hours = 0;
+  let minutes = 0;
+
+  // Parse hours and minutes
+  const timeParts = timeStr.match(/(\d{1,2})(?::(\d{2}))?\s*([ap]m)?/i);
+  if (timeParts) {
+    hours = parseInt(timeParts[1]);
+    minutes = timeParts[2] ? parseInt(timeParts[2]) : 0;
+
+    // Convert to 24-hour format
+    if (timeParts[3]) {
+      if (timeParts[3].toLowerCase() === 'pm' && hours < 12) hours += 12;
+      if (timeParts[3].toLowerCase() === 'am' && hours === 12) hours = 0;
+    }
+  }
+
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 }
