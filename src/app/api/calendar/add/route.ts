@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     }
 
     // Convert to Google Calendar format
-    const calendarEvents = scrapeData.events.map(event => ({
+    const calendarEvents = scrapeData.events.map((event: any) => ({
       summary: event.title,
       description: event.description || '',
       location: event.location || '',
