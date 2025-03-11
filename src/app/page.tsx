@@ -30,7 +30,7 @@ export default function Home() {
     setScrapedData(null)
 
     try {
-      // First, try to validate the URL
+      // Validate URL format
       try {
         new URL(url);
       } catch {
@@ -46,11 +46,12 @@ export default function Home() {
         body: JSON.stringify({ url }),
       })
 
-      const data = await response.json()
-      
       if (!response.ok) {
-        throw new Error(data.error || "Failed to add events")
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to process URL");
       }
+
+      const data = await response.json()
 
       // Show the scraped data in the UI
       if (data.events) {
@@ -65,9 +66,9 @@ export default function Home() {
       }
 
       // If there were any errors during the process, show them
-      if (data.errors?.length > 0) {
+      if (data.failedEvents > 0) {
         console.error('Some events failed to add:', data.errors)
-        setError(`Successfully added ${data.addedEvents} events, but ${data.errors.length} failed. Check console for details.`)
+        setError(`Successfully added ${data.addedEvents} events, but ${data.failedEvents} failed. Check console for details.`)
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to process calendar"

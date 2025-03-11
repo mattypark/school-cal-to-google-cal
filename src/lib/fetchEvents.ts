@@ -2,7 +2,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { AIService } from './ai-service';
 
-interface ScrapedEvent {
+export interface ScrapedEvent {
   title: string;
   date: string;
   startTime?: string;
@@ -14,8 +14,19 @@ interface ScrapedEvent {
 export const fetchEvents = async (url: string): Promise<ScrapedEvent[]> => {
   try {
     console.log('Starting web scraping for URL:', url);
-    const { data } = await axios.get(url);
-    const $ = cheerio.load(data);
+    const response = await axios.get(url, {
+      headers: {
+        'Accept': 'text/html,application/xhtml+xml,application/xml',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+
+    // Make sure we're getting HTML content
+    if (!response.data || typeof response.data !== 'string') {
+      throw new Error('Invalid response format');
+    }
+
+    const $ = cheerio.load(response.data);
     const events: ScrapedEvent[] = [];
 
     // Log the entire HTML structure for debugging
@@ -128,7 +139,7 @@ export const fetchEvents = async (url: string): Promise<ScrapedEvent[]> => {
     if (events.length === 0) {
       console.log('No events found through scraping, attempting AI extraction...');
       try {
-        const aiEvents = await AIService.extractEventsFromHTML(data);
+        const aiEvents = await AIService.extractEventsFromHTML(response.data);
         return aiEvents.map(event => ({
           title: event.summary,
           date: event.date,
